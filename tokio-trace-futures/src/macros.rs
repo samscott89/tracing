@@ -7,7 +7,7 @@ pub use tokio_executor::spawn as __spawn;
 
 #[cfg(any(feature = "tokio", feature = "tokio-executor"))]
 #[doc(hidden)]
-pub use tokio_trace::{span as __span, Level as __Level};
+pub use tokio_trace::Level as __Level;
 
 /// Spawns a future on the default executor, instrumented with its own span.
 ///
@@ -177,7 +177,7 @@ macro_rules! spawn {
     (level: $lvl:expr, target: $tgt:expr, name: $name:expr, $fut:expr, $($field:tt)*) => {{
         use $crate::macros::__spawn;
         use $crate::Instrument;
-        let span = $crate::macros::__span!(
+        let span = __tokio_trace_futures_span!(
             $lvl,
             target: $tgt,
             $name,
@@ -256,6 +256,7 @@ macro_rules! spawn {
     };
 }
 
+#[cfg(any(feature = "tokio", feature = "tokio-executor"))]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __tokio_trace_futures_module_path {
@@ -264,10 +265,20 @@ macro_rules! __tokio_trace_futures_module_path {
     };
 }
 
+#[cfg(any(feature = "tokio", feature = "tokio-executor"))]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __tokio_trace_futures_stringify {
     ($ex:expr) => {
         stringify!($ex)
+    };
+}
+
+#[cfg(any(feature = "tokio", feature = "tokio-executor"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __tokio_trace_futures_span {
+    ($lvl:expr, target: $tgt:expr, $name:expr, $($field:tt)*) => {
+        span!($lvl, target: $tgt, $name, $($field)*)
     };
 }

@@ -19,7 +19,7 @@ extern crate futures;
 extern crate tokio;
 #[cfg(feature = "tokio-executor")]
 extern crate tokio_executor;
-#[cfg_attr(test, macro_use)]
+#[macro_use]
 extern crate tokio_trace;
 
 use futures::{Future, Poll, Sink, StartSend, Stream};

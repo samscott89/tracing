@@ -26,6 +26,11 @@ use futures::{Future, Poll, Sink, StartSend, Stream};
 use tokio_trace::{dispatcher, Dispatch, Span};
 
 pub mod executor;
+#[macro_use]
+pub mod macros;
+
+// #[cfg(any(feature = "tokio", feature = "tokio-executor"))]
+// pub use self::macros::spawn;
 
 // TODO: seal?
 pub trait Instrument: Sized {

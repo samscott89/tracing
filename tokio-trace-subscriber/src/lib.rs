@@ -3,6 +3,8 @@
 extern crate tokio_trace;
 pub use tokio_trace::{Event, Id};
 
+pub mod layer;
+
 // mod compose;
 // pub use compose::Composed;
 

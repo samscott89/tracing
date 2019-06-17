@@ -1,10 +1,11 @@
 //! Utilities and helpers for implementing and composing subscribers.
 
-extern crate tokio_trace;
-pub use tokio_trace::{Event, Id};
+extern crate tokio_trace_core as trace;
+use trace::span::Id;
 
+pub mod prelude;
+pub mod filter;
 pub mod layer;
-
 // mod compose;
 // pub use compose::Composed;
 
@@ -56,4 +57,8 @@ impl Default for CurrentSpanPerThread {
     fn default() -> Self {
         Self::new()
     }
+}
+
+mod sealed {
+    pub trait Sealed {}
 }

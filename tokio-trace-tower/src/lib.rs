@@ -1,5 +1,6 @@
+
+extern crate tower_layer;
 extern crate tower_service;
-#[macro_use]
 extern crate tokio_trace;
 extern crate futures;
 extern crate tokio_trace_futures;
@@ -8,6 +9,8 @@ use std::fmt;
 use tokio_trace::{field, Level};
 use tokio_trace_futures::{Instrument, Instrumented};
 use tower_service::Service;
+
+pub mod instrument;
 
 #[derive(Clone, Debug)]
 pub struct InstrumentedService<T> {

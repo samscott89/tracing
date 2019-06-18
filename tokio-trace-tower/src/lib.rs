@@ -10,10 +10,11 @@ use tokio_trace::{field, Level};
 use tokio_trace_futures::{Instrument, Instrumented};
 use tower_service::Service;
 
+pub mod layer;
 pub mod instrument;
 
 #[derive(Clone, Debug)]
-pub struct InstrumentedService<T> {
+pub struct InstrumentedService<S, F> {
     inner: T,
     span: tokio_trace::Span,
 }

@@ -1,22 +1,24 @@
-
 extern crate tower_layer;
 extern crate tower_service;
-extern crate tokio_trace;
+#[macro_use]
+extern crate tokio_trace as trace;
+extern crate tokio_trace_futures as trace_futures;
+
+#[macro_use]
 extern crate futures;
-extern crate tokio_trace_futures;
 
 use std::fmt;
-use tokio_trace::{field, Level};
-use tokio_trace_futures::{Instrument, Instrumented};
 use tower_service::Service;
+use trace::{field, Level};
+use trace_futures::{Instrument, Instrumented};
 
-pub mod layer;
 pub mod instrument;
+pub mod request;
 
 #[derive(Clone, Debug)]
-pub struct InstrumentedService<S, F> {
-    inner: T,
-    span: tokio_trace::Span,
+pub struct InstrumentedService<S> {
+    inner: S,
+    span: trace::Span,
 }
 
 pub trait InstrumentableService<Request>: Service<Request> + Sized {
@@ -41,7 +43,8 @@ where
 
     fn call(&mut self, req: Request) -> Self::Future {
         // TODO: custom `Value` impls for `http` types would be nice...
-        let span = span!(Level::TRACE, parent: &self.span, "request", request = &field::debug(&req));
+        let span =
+            span!(Level::TRACE, parent: &self.span, "request", request = &field::debug(&req));
         let enter = span.enter();
         self.inner.call(req).instrument(span.clone())
     }

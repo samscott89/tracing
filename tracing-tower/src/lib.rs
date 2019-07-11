@@ -21,6 +21,8 @@ pub trait InstrumentableService<Request>: Service<Request> + Sized {
     }
 }
 
+impl<T, Request> InstrumentableService<Request> for T where T: Service<Request> + Sized {}
+
 impl<T: Service<Request>, Request> Service<Request> for InstrumentedService<T>
 where
     // TODO: it would be nice to do more for HTTP services...

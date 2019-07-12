@@ -137,7 +137,7 @@ impl<'a> Span<'a> {
     #[inline]
     pub(crate) fn clone_ref(&self) {
         if let State::Full(ref data) = self.lock.span {
-            data.ref_count.fetch_add(1, Ordering::Release);
+            data.ref_count.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -272,7 +272,7 @@ impl Store {
         // index from the stack.
         loop {
             // Acquire a snapshot of the head of the free list.
-            let head = self.next.load(Ordering::Relaxed);
+            let head = self.next.load(Ordering::SeqCst);
 
             {
                 // Try to insert the span without modifying the overall
@@ -288,7 +288,7 @@ impl Store {
                         // through and try to grow the slab.
                         if let Some(next) = slot.next() {
                             // Is our snapshot still valid?
-                            if self.next.compare_and_swap(head, next, Ordering::Release) == head {
+                            if self.next.compare_and_swap(head, next, Ordering::SeqCst) == head {
                                 // We can finally fill the slot!
                                 slot.fill(span.take().unwrap(), attrs, new_visitor);
                                 return idx_to_id(head);
@@ -313,7 +313,7 @@ impl Store {
                 // realloc as often?
 
                 // Update the head pointer and return.
-                self.next.store(len + 1, Ordering::Release);
+                self.next.store(len + 1, Ordering::SeqCst);
                 return idx_to_id(len);
             }
 
@@ -364,7 +364,7 @@ impl Store {
 
         // Synchronize only if we are actually removing the span (stolen
         // from std::Arc);
-        atomic::fence(Ordering::Acquire);
+        atomic::fence(Ordering::SeqCst);
 
         this.remove(&self.next, idx);
         true
@@ -471,7 +471,7 @@ impl Slot {
 
     fn drop_ref(&self) -> bool {
         match self.span {
-            State::Full(ref data) => data.ref_count.fetch_sub(1, Ordering::Release) == 1,
+            State::Full(ref data) => data.ref_count.fetch_sub(1, Ordering::SeqCst) == 1,
             State::Empty(_) => false,
         }
     }
@@ -495,32 +495,35 @@ impl Slab {
     }
 
     /// Remove a span slot from the slab.
+    #[allow(clippy::never_loop)]
     fn remove(&self, next: &AtomicUsize, idx: usize) -> Option<Data> {
         // Again we are essentially implementing a variant of Treiber's stack
         // algorithm to push the removed span's index into the free list.
         loop {
             // Get a snapshot of the current free-list head.
-            let head = next.load(Ordering::Relaxed);
+            let head = next.load(Ordering::SeqCst);
 
-            // Empty the data stored at that slot.
-            let mut slot = self.slab[idx].write();
-            let data = match mem::replace(&mut slot.span, State::Empty(head)) {
-                State::Full(data) => data,
-                state => {
-                    // The slot has already been emptied; leave
-                    // everything as it was and return `None`!
-                    slot.span = state;
-                    return None;
-                }
-            };
+            // // Empty the data stored at that slot.
+            // let mut slot = self.slab[idx].write();
+            // let data = match mem::replace(&mut slot.span, State::Empty(head)) {
+            //     State::Full(data) => data,
+            //     state => {
+            //         // The slot has already been emptied; leave
+            //         // everything as it was and return `None`!
+            //         slot.span = state;
+            //         return None;
+            //     }
+            // };
 
-            // Is our snapshot still valid?
-            if next.compare_and_swap(head, idx, Ordering::Release) == head {
-                // Empty the string but retain the allocated capacity
-                // for future spans.
-                slot.fields.clear();
-                return Some(data);
-            }
+            // // Is our snapshot still valid?
+            // if next.compare_and_swap(head, idx, Ordering::SeqCst) == head {
+            //     // Empty the string but retain the allocated capacity
+            //     // for future spans.
+            //     slot.fields.clear();
+            //     return Some(data);
+            // }
+
+            return None;
 
             atomic::spin_loop_hint();
         }

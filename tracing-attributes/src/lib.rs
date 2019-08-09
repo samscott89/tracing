@@ -168,16 +168,19 @@ pub fn instrument(args: TokenStream, item: TokenStream) -> TokenStream {
         )
     };
 
+    let name = name(&args, ident_str.clone());
     let level = level(&args);
     let target = target(&args);
-
+    let fields = with_fields(&args);
     quote_spanned!(call_site=>
         #(#attrs) *
         #vis #constness #unsafety #asyncness #abi fn #ident(#params) #return_type {
+            let __tracing_fn_name = #ident_str;
             let __tracing_attr_span = tracing::span!(
                 target: #target,
                 #level,
-                #ident_str,
+                #name,
+                #(#fields,)*
                 #(#param_names = tracing::field::debug(&#param_names_clone)),*
             );
             #body
@@ -187,20 +190,11 @@ pub fn instrument(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn level(args: &AttributeArgs) -> proc_macro2::TokenStream {
-    let mut levels = args.iter().filter_map(|arg| match arg {
-        NestedMeta::Meta(Meta::NameValue(MetaNameValue {
-            ref ident, ref lit, ..
-        })) if ident == "level" => Some(lit.clone()),
-        _ => None,
-    });
-    let level = levels.next();
-
-    // If we found more than one arg named "level", that's a syntax error...
-    if let Some(lit) = levels.next() {
-        return quote_spanned! {lit.span()=>
-            compile_error!("expected only a single `level` argument!")
-        };
+    let maybe_level = parse_attribute(args, "level");
+    if let Err(e) = maybe_level {
+        return e;
     }
+    let level = maybe_level.unwrap();
 
     match level {
         Some(Lit::Str(ref lit)) if lit.value().eq_ignore_ascii_case("trace") => {
@@ -234,22 +228,13 @@ fn level(args: &AttributeArgs) -> proc_macro2::TokenStream {
 }
 
 fn target(args: &AttributeArgs) -> proc_macro2::TokenStream {
-    let mut levels = args.iter().filter_map(|arg| match arg {
-        NestedMeta::Meta(Meta::NameValue(MetaNameValue {
-            ref ident, ref lit, ..
-        })) if ident == "target" => Some(lit.clone()),
-        _ => None,
-    });
-    let level = levels.next();
-
-    // If we found more than one arg named "level", that's a syntax error...
-    if let Some(lit) = levels.next() {
-        return quote_spanned! {lit.span()=>
-            compile_error!("expected only a single `target` argument!")
-        };
+    let maybe_target = parse_attribute(args, "target");
+    if let Err(e) = maybe_target {
+        return e;
     }
+    let target = maybe_target.unwrap();
 
-    match level {
+    match target {
         Some(Lit::Str(ref lit)) => quote!(#lit),
         Some(lit) => quote_spanned! {lit.span()=>
             compile_error!(
@@ -258,6 +243,77 @@ fn target(args: &AttributeArgs) -> proc_macro2::TokenStream {
         },
         None => quote!(module_path!()),
     }
+}
+
+fn name(args: &AttributeArgs, ident_str: String) -> proc_macro2::TokenStream {
+    let maybe_name = parse_attribute(args, "name");
+    if let Err(e) = maybe_name {
+        return e;
+    }
+    let name = maybe_name.unwrap();
+
+    match name {
+        Some(Lit::Str(ref lit)) => quote!(#lit),
+        Some(lit) => quote_spanned! {lit.span()=>
+            compile_error!(
+                "expected name to be a string literal"
+            )
+        },
+        None => quote!(#ident_str)
+    }
+}
+
+
+fn with_fields(args: &AttributeArgs) -> Vec<proc_macro2::TokenStream> {
+    let maybe_fields = parse_attribute(args, "with_fields");
+    let mut field_tokens = Vec::new();
+    if let Err(e) = maybe_fields {
+        field_tokens.push(e);
+        return field_tokens;
+    }
+    let fields = maybe_fields.unwrap();
+
+
+    match fields {
+        Some(Lit::Str(ref lit)) => {
+            for f in lit.value().split(',') {
+                let mut kv = f.split('=');
+                let k = syn::parse_str::<Ident>(kv.next().unwrap()).unwrap();
+                let v = syn::parse_str::<syn::Expr>(kv.next().unwrap()).unwrap();
+                
+                field_tokens.push(
+                    quote!(#k = #v)
+                )
+            }
+        },
+        Some(lit) => field_tokens.push(quote_spanned! {lit.span()=>
+            compile_error!(
+                "expected target to be a string literal"
+            )
+        }),
+        None => {},
+    }
+
+    field_tokens
+}
+
+fn parse_attribute(args: &AttributeArgs, name: &'static str) -> Result<Option<Lit>, proc_macro2::TokenStream> {
+    let mut matching = args.iter().filter_map(|arg| match arg {
+        NestedMeta::Meta(Meta::NameValue(MetaNameValue {
+            ref ident, ref lit, ..
+        })) if ident == name => Some(lit.clone()),
+        _ => None,
+    });
+    let found = matching.next();
+
+    // If we found more than one arg, that's a syntax error...
+    if let Some(lit) = matching.next() {
+        return Err(quote_spanned! {lit.span() =>
+            compile_error!("argument repeated twice")
+        });
+    }
+
+    Ok(found)
 }
 
 mod async_await {

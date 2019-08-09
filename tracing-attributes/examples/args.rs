@@ -1,7 +1,7 @@
 use tracing::{debug, info};
 use tracing_attributes::instrument;
 
-#[instrument]
+#[instrument(name="f", with_fields="fun=\"nth_fibonacci\"")]
 fn nth_fibonacci(n: u64) -> u64 {
     if n == 0 || n == 1 {
         debug!("Base case");
@@ -12,7 +12,7 @@ fn nth_fibonacci(n: u64) -> u64 {
     }
 }
 
-#[instrument]
+#[instrument(name="f", with_fields="fun=__tracing_fn_name")]
 fn fibonacci_seq(to: u64) -> Vec<u64> {
     let mut sequence = vec![];
 
@@ -26,7 +26,7 @@ fn fibonacci_seq(to: u64) -> Vec<u64> {
 
 fn main() {
     let subscriber = tracing_fmt::FmtSubscriber::builder()
-        .with_filter(tracing_fmt::filter::EnvFilter::from("args=trace"))
+        .with_filter(tracing_fmt::filter::EnvFilter::from("trace"))
         .finish();
 
     tracing::subscriber::with_default(subscriber, || {

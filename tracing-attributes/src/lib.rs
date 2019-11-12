@@ -31,9 +31,9 @@
 //! ```
 //!
 //! [`tracing`]: https://crates.io/crates/tracing
-//! [span]: https://docs.rs/tracing/0.1.5/tracing/span/index.html
+//! [span]: https://docs.rs/tracing/0.1.10/tracing/span/index.html
 //! [instrument]: attr.instrument.html
-#![doc(html_root_url = "https://docs.rs/tracing-attributes/0.1.5")]
+#![doc(html_root_url = "https://docs.rs/tracing-attributes/0.1.10")]
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -131,7 +131,7 @@ use syn::{
 /// - When using `#[instrument]` on an `async fn`, the `tracing_futures` must
 ///   also be specified as a dependency in `Cargo.toml`.
 ///
-/// [span]: https://docs.rs/tracing/0.1.5/tracing/span/index.html
+/// [span]: https://docs.rs/tracing/0.1.10/tracing/span/index.html
 /// [`tracing`]: https://github.com/tokio-rs/tracing
 #[proc_macro_attribute]
 pub fn instrument(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -228,6 +228,91 @@ pub fn instrument(args: TokenStream, item: TokenStream) -> TokenStream {
                 #(#param_names = tracing::field::debug(&#param_names_clone)),*
             );
             #body
+        }
+    )
+    .into()
+}
+
+/// Creates a new `tracing` [event] every time the function is called.
+///
+/// The generated event's message will be the name of the function, and any
+/// arguments to that function will be recorded as fields using `fmt::Debug`.
+///
+/// Examples of setting the level and the target are the same as in the
+/// example for [instrument]
+///
+/// [instrument]: attr.instrument.html
+/// [span]: https://docs.rs/tracing/0.1.10/tracing/event/index.html
+/// [`tracing`]: https://github.com/tokio-rs/tracing
+#[proc_macro_attribute]
+pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
+    let input: ItemFn = syn::parse_macro_input!(item as ItemFn);
+    let args = syn::parse_macro_input!(args as AttributeArgs);
+
+    // these are needed ahead of time, as ItemFn contains the function body _and_
+    // isn't representable inside a quote!/quote_spanned! macro
+    // (Syn's ToTokens isn't implemented for ItemFn)
+    let ItemFn {
+        attrs,
+        vis,
+        block,
+        sig,
+        ..
+    } = input;
+
+    let Signature {
+        output: return_type,
+        inputs: params,
+        unsafety,
+        asyncness,
+        constness,
+        abi,
+        ident,
+        generics:
+            syn::Generics {
+                params: gen_params,
+                where_clause,
+                ..
+            },
+        ..
+    } = sig;
+
+    // function name
+    let ident_str = ident.to_string();
+
+    // Pull out the arguments-to-be-skipped first, so we can filter results below.
+    let skips = match skips(&args) {
+        Ok(skips) => skips,
+        Err(err) => return quote!(#err).into(),
+    };
+
+    let param_names: Vec<Ident> = params
+        .clone()
+        .into_iter()
+        .flat_map(|param| match param {
+            FnArg::Typed(PatType { pat, .. }) => param_names(*pat),
+            FnArg::Receiver(_) => Box::new(iter::once(Ident::new("self", param.span()))),
+        })
+        .filter(|ident| !skips.contains(ident))
+        .collect();
+    let param_names_clone = param_names.clone();
+
+    let level = level(&args);
+    let target = target(&args);
+    let event_name = name(&args, ident_str);
+
+    quote!(
+        #(#attrs) *
+        #vis #constness #unsafety #asyncness #abi fn #ident<#gen_params>(#params) #return_type
+        #where_clause
+        {
+            tracing::event!(
+                target: #target,
+                #level,
+                { #(#param_names = tracing::field::debug(&#param_names_clone)),* },
+                #event_name,
+            );
+            #block
         }
     )
     .into()
